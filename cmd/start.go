@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/vinhphuc13/aix/internal/event"
+	"github.com/vinhphuc13/aix/internal/hook"
 	"github.com/vinhphuc13/aix/internal/inject"
 	"github.com/vinhphuc13/aix/internal/session"
 	"github.com/spf13/cobra"
@@ -55,14 +56,20 @@ var startCmd = &cobra.Command{
 		recentEvts, _ := event.ReadLast(aixDir, s.ID, 10)
 		_ = inject.WriteContextFile(aixDir, s, recentEvts)
 
+		settingsPath := hook.FindSettingsPath(cwd, false)
+		hookErr := hook.Install(settingsPath)
+
 		fmt.Printf("Started session %s\n", s.ID)
 		fmt.Printf("  Name: %s\n", s.Name)
 		fmt.Printf("  Goal: %s\n", s.Goal)
 		fmt.Printf("  State: %s\n", aixDir)
+		if hookErr == nil {
+			fmt.Printf("  Hooks: installed (%s)\n", settingsPath)
+		}
 		fmt.Println()
 		fmt.Println("Next:")
-		fmt.Println("  aix hook install          # auto-inject context into Claude")
 		fmt.Println("  aix add task 'first task'")
+		fmt.Println("  aix mcp config            # connect Cursor")
 		return nil
 	},
 }

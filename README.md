@@ -41,11 +41,7 @@ This creates `.aix/` in your project and auto-saves an initial checkpoint. You'r
 
 ### 2. Connect your AI tools
 
-**Claude Code** — install hooks so context is injected automatically into every prompt:
-
-```bash
-aix hook install
-```
+**Claude Code** — hooks are installed automatically by `aix start`. Nothing extra to do.
 
 **Cursor + Claude Code (bidirectional)** — set up the MCP server so both tools share the same session state:
 
@@ -143,6 +139,8 @@ aix status       # see tasks, decisions, last checkpoint at a glance
 | `aix checkpoint -m <message> [--snapshot]` | Save a checkpoint |
 
 ### Claude Code hooks
+
+Hooks are installed automatically when you run `aix start`. To manage them manually:
 
 ```bash
 aix hook install            # project-level (.claude/settings.json)
