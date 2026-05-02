@@ -69,25 +69,21 @@ aix done "Write integration tests"
 aix checkpoint -m "middleware done, redis storage next"
 ```
 
-### 5. Switch tools, resume context
+### 5. Switch to Cursor
 
-**Switch from Claude Code to Cursor:**
-
-If you set up MCP (step 2), Cursor already has the current context — just open it and keep working.
-
-If you didn't set up MCP, run once:
+**First time (one-time setup per project):**
 ```bash
 aix continue --format cursor
 ```
-This writes your session context into `.cursorrules`. Cursor picks it up automatically on the next prompt.
+This writes your session context into `.cursorrules`. From this point on, every change you make (task done, decision added, checkpoint, etc.) automatically keeps `.cursorrules` in sync — no repeat commands needed.
 
-**Switch from Cursor back to Claude Code:**
+**Subsequent switches:** just open Cursor. `.cursorrules` is always current.
 
-If you used MCP, Claude Code already sees the updated state.
+### 6. Switch back to Claude Code
 
-If not, just open Claude Code — the hook injects the latest context from `.aix/context.md` automatically.
+Claude Code's hook reads from `.aix/context.md` on every prompt, which is always up-to-date. Just open Claude Code and keep working — no resume command needed.
 
-### 6. Next day
+### 7. Next day
 
 ```bash
 aix continue     # prints current context; confirms you're resuming the right session
