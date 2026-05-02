@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -53,6 +54,15 @@ func New(aixDir string) *server.MCPServer {
 		mcp.WithDescription("Set the current focus for this session (shown at the top of injected context)."),
 		mcp.WithString("focus", mcp.Required(), mcp.Description("What you are currently working on")),
 	), makeHandler(aixDir, handleFocus))
+
+	s.AddTool(mcp.NewTool("aix_list_sessions",
+		mcp.WithDescription("List all aix sessions in this project. Use this when the user wants to switch features or resume a different session."),
+	), makeSessionsHandler(aixDir, handleListSessions))
+
+	s.AddTool(mcp.NewTool("aix_switch_session",
+		mcp.WithDescription("Switch to a different session by name or ID. Call aix_list_sessions first to see available sessions."),
+		mcp.WithString("session", mcp.Required(), mcp.Description("Session name or partial ID to switch to")),
+	), makeSessionsHandler(aixDir, handleSwitchSession))
 
 	return s
 }
@@ -224,6 +234,89 @@ func handleFocus(aixDir string, s *session.Session, req mcp.CallToolRequest) (st
 		"from": old, "to": focus,
 	})
 	return fmt.Sprintf("Focus: %s", focus), nil
+}
+
+// makeSessionsHandler is like makeHandler but does NOT pre-load the current
+// session — list and switch operate on all sessions, not just the current one.
+func makeSessionsHandler(aixDir string, fn func(string, mcp.CallToolRequest) (string, error)) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		msg, err := fn(aixDir, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(msg), nil
+	}
+}
+
+func handleListSessions(aixDir string, _ mcp.CallToolRequest) (string, error) {
+	sessions, err := session.List(aixDir)
+	if err != nil {
+		return "", err
+	}
+	if len(sessions) == 0 {
+		return "No sessions found.", nil
+	}
+
+	currentID := currentSessionID(aixDir)
+
+	var b strings.Builder
+	for _, s := range sessions {
+		open := 0
+		for _, t := range s.Tasks {
+			if t.Status != session.TaskDone {
+				open++
+			}
+		}
+		marker := "  "
+		if s.ID == currentID {
+			marker = "* "
+		}
+		lastCP := ""
+		if len(s.Checkpoints) > 0 {
+			lastCP = fmt.Sprintf(" [%s]", s.Checkpoints[len(s.Checkpoints)-1].Message)
+		}
+		fmt.Fprintf(&b, "%s%s  %s  %d open tasks%s\n", marker, s.ID[:8], s.Name, open, lastCP)
+	}
+	b.WriteString("\n* = current session")
+	return b.String(), nil
+}
+
+func handleSwitchSession(aixDir string, req mcp.CallToolRequest) (string, error) {
+	query, err := req.RequireString("session")
+	if err != nil {
+		return "", fmt.Errorf("session is required")
+	}
+
+	sessions, err := session.List(aixDir)
+	if err != nil {
+		return "", err
+	}
+
+	for _, s := range sessions {
+		if strings.HasPrefix(s.ID, query) || strings.EqualFold(s.Name, query) ||
+			strings.Contains(strings.ToLower(s.Name), strings.ToLower(query)) {
+			if err := session.SetCurrent(aixDir, s.ID); err != nil {
+				return "", err
+			}
+			open := 0
+			for _, t := range s.Tasks {
+				if t.Status != session.TaskDone {
+					open++
+				}
+			}
+			return fmt.Sprintf("Switched to: %s (%s)\nGoal: %s\nOpen tasks: %d",
+				s.Name, s.ID[:8], s.Goal, open), nil
+		}
+	}
+	return "", fmt.Errorf("no session found matching %q — call aix_list_sessions to see available sessions", query)
+}
+
+func currentSessionID(aixDir string) string {
+	data, err := os.ReadFile(filepath.Join(aixDir, "current"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }
 
 // ProjectRoot returns the project root given the aix directory.
