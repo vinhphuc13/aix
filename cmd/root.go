@@ -29,6 +29,7 @@ func init() {
 	rootCmd.AddCommand(doneCmd)
 	rootCmd.AddCommand(focusCmd)
 	rootCmd.AddCommand(hookCmd)
+	rootCmd.AddCommand(mcpCmd)
 }
 
 // findAIXDir walks up from cwd to find .aix/
