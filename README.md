@@ -6,7 +6,9 @@ Think: **"Git for AI sessions"**. Not chat history.
 
 ## Why
 
-AI coding tools (Claude Code, Cursor, etc.) start every session cold. `aix` gives each session memory: what you're building, what you've decided, what's left to do. When you resume, the context is injected automatically.
+You hit Claude Pro's limit mid-feature. You switch to Cursor. The context is gone — Cursor doesn't know what you were building, what you decided, what's left to do. You spend the first few minutes re-explaining everything.
+
+`aix` solves this. It keeps a shared `.aix/` state file in your project. Every AI tool reads from and writes to the same session. Switch between Claude Code and Cursor mid-task — context is continuous, no manual copy-paste.
 
 ## Install
 
@@ -24,40 +26,108 @@ make install
 
 Requires Go 1.23+.
 
-## Quick Start
+---
+
+## Usage
+
+### 1. Start a session
 
 ```bash
-# 1. Start a session in your project directory
+cd your-project
 aix start auth-refactor --goal "Replace JWT with session tokens"
+```
 
-# 2. Install Claude Code hooks (auto-injects context into every prompt)
+This creates `.aix/` in your project and auto-saves an initial checkpoint. You're ready.
+
+### 2. Connect your AI tools
+
+**Claude Code** — install hooks so context is injected automatically into every prompt:
+
+```bash
 aix hook install
+```
 
-# 3. Work — add tasks, record decisions, track files
-aix add task "Update middleware to validate session tokens"
+**Cursor + Claude Code (bidirectional)** — set up the MCP server so both tools share the same session state:
+
+```bash
+aix mcp config   # prints the JSON snippet to paste into settings
+```
+
+Paste the output into `.claude/settings.json` (Claude Code) and Cursor's MCP settings (`Cursor Settings → MCP`). Both tools now read and write the same session.
+
+### 3. Work normally
+
+aix tracks your session automatically. You can also update it manually from the terminal at any time:
+
+```bash
+aix add task "Write integration tests for token refresh"
 aix add decision "Use Redis for session storage" --rationale "need TTL support"
 aix add file internal/auth/middleware.go --role primary
-
-# 4. Mark tasks done as you go
-aix done "Update middleware"
-
-# 5. Save a checkpoint before stopping
-aix checkpoint -m "middleware done, storage next"
-
-# 6. Next day: resume
-aix continue
+aix focus "token refresh flow"
 ```
+
+### 4. Mark progress
+
+```bash
+aix done "Write integration tests"
+aix checkpoint -m "middleware done, redis storage next"
+```
+
+### 5. Switch tools, resume context
+
+**Switch from Claude Code to Cursor:**
+
+If you set up MCP (step 2), Cursor already has the current context — just open it and keep working.
+
+If you didn't set up MCP, run once:
+```bash
+aix continue --format cursor
+```
+This writes your session context into `.cursorrules`. Cursor picks it up automatically on the next prompt.
+
+**Switch from Cursor back to Claude Code:**
+
+If you used MCP, Claude Code already sees the updated state.
+
+If not, just open Claude Code — the hook injects the latest context from `.aix/context.md` automatically.
+
+### 6. Next day
+
+```bash
+aix continue     # prints current context; confirms you're resuming the right session
+aix status       # see tasks, decisions, last checkpoint at a glance
+```
+
+---
+
+## How context flows
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Claude Code                         Cursor              │
+│                                                          │
+│  hook: auto-inject          MCP: aix_status             │
+│  context per prompt    ◀──▶  aix_add_task, aix_done...  │
+│                                                          │
+│              .aix/ (shared state)                        │
+│         sessions/<id>.json   context.md                  │
+└─────────────────────────────────────────────────────────┘
+```
+
+- `.aix/context.md` — always kept up-to-date after every change. Claude Code hooks inject it automatically; Cursor reads it via MCP or `.cursorrules`.
+- MCP server — both tools can call `aix_add_task`, `aix_done`, etc. directly. Changes from either side are immediately visible to the other.
+
+---
 
 ## Commands
 
-### Session lifecycle
+### Session
 
 | Command | Description |
 |---|---|
-| `aix start <name> [--goal <text>]` | Start a new session |
-| `aix continue [session-id]` | Resume a session and print its context |
-| `aix status` | Show current session state |
-| `aix status --json` | Raw JSON output |
+| `aix start <name> [--goal <text>]` | Start a new session (auto-creates initial checkpoint) |
+| `aix continue [session-id] [--format cursor]` | Resume session; `--format cursor` writes to `.cursorrules` |
+| `aix status [--json]` | Show current session state |
 | `aix list` | List all sessions |
 
 ### Tracking
@@ -66,17 +136,11 @@ aix continue
 |---|---|
 | `aix add task <title> [--note <text>]` | Add a task |
 | `aix add decision <summary> [--rationale <text>]` | Record a decision |
-| `aix add note <content> [--tag arch\|risk\|todo]` | Add an engineering note |
+| `aix add note <content> [--tag arch\|risk\|todo]` | Add a note |
 | `aix add file <path> [--role primary\|test\|config\|infra]` | Track a file |
 | `aix done <task-title-or-id>` | Mark a task done |
 | `aix focus <text>` | Set current focus |
-
-### Checkpoints
-
-```bash
-aix checkpoint -m "what you just did"
-aix checkpoint -m "before big refactor" --snapshot   # also copies active files
-```
+| `aix checkpoint -m <message> [--snapshot]` | Save a checkpoint |
 
 ### Claude Code hooks
 
@@ -86,28 +150,44 @@ aix hook install --global   # user-level (~/.claude/settings.json)
 aix hook uninstall
 ```
 
-Once installed, hooks:
-- Inject session context into every prompt (`UserPromptSubmit`)
-- Track file edits automatically (`PostToolUse`)
-- Auto-checkpoint when a session ends (`Stop`)
+Hooks handle three events:
+- `UserPromptSubmit` — injects session context into every prompt
+- `PostToolUse` — tracks file edits automatically
+- `Stop` — auto-checkpoints when the session ends
 
-For Cursor or other tools, use `aix continue --format cursor` and paste the output manually.
+### MCP server
 
-## How it works
+```bash
+aix mcp serve    # start MCP server over stdio (called by AI tools)
+aix mcp config   # print config snippet for Claude Code and Cursor
+```
 
-`aix` stores session state in a `.aix/` directory at your project root — plain JSON files, no server, no sync.
+MCP tools exposed to AI agents:
+
+| Tool | Description |
+|---|---|
+| `aix_status` | Get current session context |
+| `aix_add_task` | Add a task |
+| `aix_done` | Mark a task done |
+| `aix_add_decision` | Record a decision |
+| `aix_add_note` | Add a note |
+| `aix_checkpoint` | Save a checkpoint |
+| `aix_focus` | Set current focus |
+
+---
+
+## File layout
 
 ```
 .aix/
-  current          # pointer to active session ID
-  sessions/
-    <id>.json      # session state (tasks, decisions, notes, files, checkpoints)
-  events/
-    <session-id>.jsonl  # append-only event log
-  snapshots/       # optional file snapshots (--snapshot flag)
+  current              # active session ID
+  context.md           # always-current context block (updated on every change)
+  sessions/<id>.json   # full session state
+  events/<id>.jsonl    # append-only event log
+  snapshots/           # optional file snapshots (--snapshot flag)
 ```
 
-The `aix continue` command (and hooks) render this state into a context block that AI tools can read at the start of each session.
+---
 
 ## Development
 
