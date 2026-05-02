@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/vinhphuc13/aix/internal/event"
+	"github.com/vinhphuc13/aix/internal/inject"
 	"github.com/vinhphuc13/aix/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -47,6 +48,9 @@ var doneCmd = &cobra.Command{
 		_ = event.Append(aixDir, s.ID, event.EventTaskDone, map[string]string{
 			"id": s.Tasks[idx].ID, "title": s.Tasks[idx].Title,
 		})
+
+		recentEvts, _ := event.ReadLast(aixDir, s.ID, 10)
+		_ = inject.WriteContextFile(aixDir, s, recentEvts)
 
 		fmt.Printf("[x] Done: %s\n", s.Tasks[idx].Title)
 		return nil

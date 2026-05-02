@@ -159,6 +159,9 @@ func HandlePostToolUse(stdin io.Reader, stdout io.Writer) error {
 	_ = session.Save(aixDir, s)
 	_ = event.Append(aixDir, s.ID, evType, map[string]string{"path": relPath})
 
+	recentEvents, _ := event.ReadLast(aixDir, s.ID, 10)
+	_ = inject.WriteContextFile(aixDir, s, recentEvents)
+
 	fmt.Fprintf(stdout, "{}\n")
 	return nil
 }
@@ -211,6 +214,9 @@ func HandleStop(stdin io.Reader, stdout io.Writer) error {
 	_ = event.Append(aixDir, s.ID, event.EventSessionStopped, map[string]string{
 		"reason": input.Reason,
 	})
+
+	recentEvents, _ := event.ReadLast(aixDir, s.ID, 10)
+	_ = inject.WriteContextFile(aixDir, s, recentEvents)
 
 	fmt.Fprintf(stdout, "{}\n")
 	return nil

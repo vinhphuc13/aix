@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/vinhphuc13/aix/internal/event"
+	"github.com/vinhphuc13/aix/internal/inject"
 	"github.com/vinhphuc13/aix/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -46,6 +47,8 @@ var addTaskCmd = &cobra.Command{
 		_ = event.Append(aixDir, s.ID, event.EventTaskAdded, map[string]string{
 			"id": t.ID, "title": t.Title,
 		})
+		recentEvts, _ := event.ReadLast(aixDir, s.ID, 10)
+		_ = inject.WriteContextFile(aixDir, s, recentEvts)
 		fmt.Printf("[ ] %s\n", t.Title)
 		return nil
 	},
@@ -76,6 +79,8 @@ var addDecisionCmd = &cobra.Command{
 			return err
 		}
 		_ = event.Append(aixDir, s.ID, event.EventDecisionAdded, map[string]string{"summary": d.Summary})
+		recentEvts, _ := event.ReadLast(aixDir, s.ID, 10)
+		_ = inject.WriteContextFile(aixDir, s, recentEvts)
 		if d.Rationale != "" {
 			fmt.Printf("• %s [%s]\n", d.Summary, d.Rationale)
 		} else {
@@ -112,6 +117,8 @@ var addNoteCmd = &cobra.Command{
 		_ = event.Append(aixDir, s.ID, event.EventNoteAdded, map[string]string{
 			"content": n.Content, "tag": n.Tag,
 		})
+		recentEvts, _ := event.ReadLast(aixDir, s.ID, 10)
+		_ = inject.WriteContextFile(aixDir, s, recentEvts)
 		tag := ""
 		if n.Tag != "" {
 			tag = "[" + n.Tag + "] "
@@ -168,6 +175,8 @@ var addFileCmd = &cobra.Command{
 		_ = event.Append(aixDir, s.ID, event.EventFileAdded, map[string]string{
 			"path": relPath, "role": role,
 		})
+		recentEvts, _ := event.ReadLast(aixDir, s.ID, 10)
+		_ = inject.WriteContextFile(aixDir, s, recentEvts)
 		fmt.Printf("[%s] %s\n", role, relPath)
 		return nil
 	},

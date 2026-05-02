@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"github.com/vinhphuc13/aix/internal/event"
+	"github.com/vinhphuc13/aix/internal/inject"
 	"github.com/vinhphuc13/aix/internal/session"
 	"github.com/vinhphuc13/aix/internal/snapshot"
 	"github.com/spf13/cobra"
@@ -31,52 +31,30 @@ var checkpointCmd = &cobra.Command{
 			return err
 		}
 
-		cpID := session.NewID()
-		snapID := ""
+		cp := createCheckpoint(aixDir, s, checkpointMessage)
 
+		snapID := ""
 		if checkpointSnapshot && len(s.ActiveFiles) > 0 {
 			projectRoot := filepath.Dir(aixDir)
 			var paths []string
 			for _, f := range s.ActiveFiles {
 				paths = append(paths, f.Path)
 			}
-			snap, err := snapshot.Create(aixDir, s.ID, cpID, projectRoot, paths)
+			snap, err := snapshot.Create(aixDir, s.ID, cp.ID, projectRoot, paths)
 			if err != nil {
 				fmt.Printf("warning: snapshot failed: %v\n", err)
 			} else {
 				snapID = snap.ID
+				s.Checkpoints[len(s.Checkpoints)-1].SnapshotID = snapID
+				_ = session.Save(aixDir, s)
 			}
 		}
 
-		open, done := 0, 0
-		for _, t := range s.Tasks {
-			if t.Status == session.TaskDone {
-				done++
-			} else {
-				open++
-			}
-		}
-
-		cp := session.Checkpoint{
-			ID:         cpID,
-			Message:    checkpointMessage,
-			SnapshotID: snapID,
-			CreatedAt:  time.Now(),
-			OpenTasks:  open,
-			DoneTasks:  done,
-		}
-		s.Checkpoints = append(s.Checkpoints, cp)
-
-		if err := session.Save(aixDir, s); err != nil {
-			return fmt.Errorf("failed to save: %w", err)
-		}
-		_ = event.Append(aixDir, s.ID, event.EventCheckpoint, map[string]string{
-			"message": cp.Message,
-			"id":      cp.ID,
-		})
+		recentEvts, _ := event.ReadLast(aixDir, s.ID, 10)
+		_ = inject.WriteContextFile(aixDir, s, recentEvts)
 
 		fmt.Printf("Checkpoint: %s\n", cp.Message)
-		fmt.Printf("  Tasks: %d open, %d done\n", open, done)
+		fmt.Printf("  Tasks: %d open, %d done\n", cp.OpenTasks, cp.DoneTasks)
 		if snapID != "" {
 			fmt.Printf("  Snapshot: %s (%d files)\n", snapID, len(s.ActiveFiles))
 		}

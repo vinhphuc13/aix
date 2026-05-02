@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/vinhphuc13/aix/internal/event"
+	"github.com/vinhphuc13/aix/internal/inject"
 	"github.com/vinhphuc13/aix/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -31,6 +32,9 @@ var focusCmd = &cobra.Command{
 		_ = event.Append(aixDir, s.ID, event.EventFocusChanged, map[string]string{
 			"from": old, "to": text,
 		})
+
+		recentEvts, _ := event.ReadLast(aixDir, s.ID, 10)
+		_ = inject.WriteContextFile(aixDir, s, recentEvts)
 
 		fmt.Printf("Focus: %s\n", text)
 		return nil

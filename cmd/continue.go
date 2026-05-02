@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/vinhphuc13/aix/internal/event"
 	"github.com/vinhphuc13/aix/internal/inject"
@@ -49,7 +51,13 @@ or other tools.`,
 		fmt.Println(context)
 
 		if continueFormat == "cursor" {
-			fmt.Println("--- Paste the above into Cursor's Notepad or .cursorrules ---")
+			projectRoot := filepath.Dir(aixDir)
+			if err := inject.UpsertCursorRules(projectRoot, s, recentEvents); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not write .cursorrules: %v\n", err)
+			} else {
+				fmt.Printf("Written to %s/.cursorrules\n", projectRoot)
+				fmt.Println("Cursor will now inject your aix session context automatically.")
+			}
 		} else {
 			fmt.Println("Tip: run 'aix hook install' to inject this automatically into Claude Code.")
 		}
